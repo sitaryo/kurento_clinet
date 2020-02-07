@@ -40,6 +40,9 @@ public class SocketService {
         server.addConnectListener(
                 client -> log.info("First connect, wait for connect-auth, clientId={}", client.getSessionId()));
 
+        server.addDisconnectListener(
+                client -> log.info("{} disconnect from server ",client.getSessionId())
+        );
         server.addEventListener("hello", Some.class, ((client, data, ackSender) -> {
             log.info("hello data {}", data);
         }));
@@ -66,17 +69,17 @@ public class SocketService {
             onlineUsers.put(user.getSessionId(), user);
 
             // 连接 播放端 和 视频端
-            endpoint.generateOffer();
             player.connect(endpoint);
 //            playerEndpoints.forEach(player->player.connect(endpoint));
 
             endpoint.addIceCandidateFoundListener(
                     event -> client.sendEvent("iceCandidate", event.getCandidate()));
 
-            val sdpAnswer = endpoint.processAnswer(msg.getSdpOffer());
+            val sdpAnswer = endpoint.processOffer(msg.getSdpOffer());
             client.sendEvent("startResponse", sdpAnswer);
 
             endpoint.addMediaStateChangedListener(event -> {
+                log.info("media state change: {} to {}",event.getOldState(),event.getNewState());
                 if (event.getNewState() == MediaState.CONNECTED) {
 //                    log.info("!!! send videoinfo {}",playerEndpoints.get(0).getVideoInfo());
 //                    playerEndpoints.forEach(playerEndpoint ->
@@ -117,7 +120,8 @@ public class SocketService {
         });
 
         this.server.addEventListener("onIceCandidate", IceCandidate.class, (client, ice, request) -> {
-            log.info("onIceCandidate data {}", ice);
+            log.info("onIceCandidate data candidate:{} sdpMid:{} sdpMLineIndex:{}",
+                    ice.getCandidate(), ice.getSdpMid(), ice.getSdpMLineIndex());
             val onlineUser = onlineUsers.get(client.getSessionId());
             Optional.of(onlineUser).ifPresent(user -> user.getEndpoint().addIceCandidate(ice));
         });
