@@ -8,7 +8,10 @@ import com.sendroids.kurentovideoclient.entity.User;
 import com.sendroids.kurentovideoclient.model.kurento.StartModel;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.kurento.client.*;
+import org.kurento.client.IceCandidate;
+import org.kurento.client.KurentoClient;
+import org.kurento.client.PlayerEndpoint;
+import org.kurento.client.WebRtcEndpoint;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -16,7 +19,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -41,7 +43,7 @@ public class SocketService {
                 client -> log.info("First connect, wait for connect-auth, clientId={}", client.getSessionId()));
 
         server.addDisconnectListener(
-                client -> log.info("{} disconnect from server ",client.getSessionId())
+                client -> log.info("{} disconnect from server ", client.getSessionId())
         );
         server.addEventListener("hello", Some.class, ((client, data, ackSender) -> {
             log.info("hello data {}", data);
@@ -54,15 +56,10 @@ public class SocketService {
             val pipeline = kurento.createMediaPipeline();
             val endpoint = new WebRtcEndpoint.Builder(pipeline).build();
             val player = new PlayerEndpoint.Builder(pipeline, msg.getVideoUrl()).build();
-//            val playerEndpoints = msg.getVideoUrls()
-//                    .stream()
-//                    .map(url -> new PlayerEndpoint.Builder(pipeline, url).build())
-//                    .collect(Collectors.toList());
 
             // 将参数set 进user
             user.setPipeline(pipeline);
             user.setEndpoint(endpoint);
-//            user.setPlayerEndpoints(playerEndpoints);
             user.setPlayer(player);
 
             // 添加user入库
@@ -70,7 +67,6 @@ public class SocketService {
 
             // 连接 播放端 和 视频端
             player.connect(endpoint);
-//            playerEndpoints.forEach(player->player.connect(endpoint));
 
             endpoint.addIceCandidateFoundListener(
                     event -> client.sendEvent("iceCandidate", event.getCandidate()));
@@ -78,33 +74,7 @@ public class SocketService {
             val sdpAnswer = endpoint.processOffer(msg.getSdpOffer());
             client.sendEvent("startResponse", sdpAnswer);
 
-            endpoint.addMediaStateChangedListener(event -> {
-                log.info("media state change: {} to {}",event.getOldState(),event.getNewState());
-                if (event.getNewState() == MediaState.CONNECTED) {
-//                    log.info("!!! send videoinfo {}",playerEndpoints.get(0).getVideoInfo());
-//                    playerEndpoints.forEach(playerEndpoint ->
-//                            client.sendEvent("videoInfo", playerEndpoint.getVideoInfo()));
-
-                    log.info("!!! send videoinfo {}", player.getVideoInfo());
-                    client.sendEvent("videoInfo", player.getVideoInfo());
-                }
-            });
-
             endpoint.gatherCandidates();
-
-//            playerEndpoints.forEach(playerEndpoint -> {
-//                playerEndpoint.addErrorListener(event -> {
-//                    log.info("ErrorEvent: {}", event.getDescription());
-//                    client.sendEvent("playEnd");
-//                });
-//
-//                playerEndpoint.addEndOfStreamListener(event -> {
-//                    log.info("EndOfStreamEvent: {}", event.getTimestamp());
-//                    client.sendEvent("playEnd");
-//                });
-//
-//                playerEndpoint.play();
-//            });
 
             player.addErrorListener(event -> {
                 log.info("ErrorEvent: {}", event.getDescription());
